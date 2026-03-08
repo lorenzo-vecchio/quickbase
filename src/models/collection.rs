@@ -122,6 +122,25 @@ impl Default for Collection {
     }
 }
 
+impl sqlx::Type<sqlx::Sqlite> for CollectionType {
+    fn type_info() -> sqlx::sqlite::SqliteTypeInfo {
+        <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+    }
+}
+
+impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for CollectionType {
+    fn decode(
+        value: sqlx::sqlite::SqliteValueRef<'r>,
+    ) -> Result<Self, sqlx::error::BoxDynError> {
+        let raw = <String as sqlx::Decode<sqlx::Sqlite>>::decode(value)?;
+        match raw.as_str() {
+            "auth" => Ok(Self::Auth),
+            "view" => Ok(Self::View),
+            _ => Ok(Self::Base),
+        }
+    }
+}
+
 /// Generates a random ID in PocketBase's format: 'r' + 14 hex chars.
 fn generate_id() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};

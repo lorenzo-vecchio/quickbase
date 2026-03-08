@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 use crate::db::error::DbError;
 
@@ -24,9 +25,11 @@ impl DbPools {
     }
 
     async fn open_pool(url: &str) -> Result<SqlitePool, DbError> {
+        let options = sqlx::sqlite::SqliteConnectOptions::from_str(url)?
+            .create_if_missing(true);
         Ok(SqlitePoolOptions::new()
             .max_connections(10)
-            .connect(url)
+            .connect_with(options)
             .await?)
     }
 
