@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 /// Mirrors PocketBase's core.Model interface.
 /// Every DB-backed struct implements this.
 pub trait Model: Send + Sync {
@@ -12,7 +14,7 @@ pub trait Model: Send + Sync {
 
 /// Mirrors PocketBase's core.BaseModel.
 /// Embed this in every model struct.
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct BaseModel {
     pub id: String,
     #[sqlx(skip)]
