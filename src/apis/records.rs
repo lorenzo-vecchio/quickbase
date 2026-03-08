@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::collections::HashMap;
 use axum::{
     Router,
     routing::get,
@@ -7,6 +8,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use sqlx::Row;
 use crate::core::App;
 use crate::db::DbError;
 use crate::models::record::Record;
@@ -15,6 +17,37 @@ pub fn router() -> Router<Arc<App>> {
     Router::new()
         .route("/", get(list_records))
         .route("/{id}", get(get_record))
+}
+
+fn row_to_map(row: &sqlx::sqlite::SqliteRow) -> HashMap<String, serde_json::Value> {
+    use sqlx::Column;
+    let mut map = HashMap::new();
+    for col in row.columns() {
+        let name = col.name().to_string();
+        let value: serde_json::Value = row
+            .try_get::<Option<String>, _>(col.ordinal())
+            .ok()
+            .flatten()
+            .map(|s| {
+                // try to parse as JSON first (for schema, options etc.)
+                serde_json::from_str(&s).unwrap_or(serde_json::Value::String(s))
+            })
+            .or_else(|| {
+                row.try_get::<Option<i64>, _>(col.ordinal())
+                    .ok()
+                    .flatten()
+                    .map(|n| serde_json::json!(n))
+            })
+            .or_else(|| {
+                row.try_get::<Option<f64>, _>(col.ordinal())
+                    .ok()
+                    .flatten()
+                    .map(|n| serde_json::json!(n))
+            })
+            .unwrap_or(serde_json::Value::Null);
+        map.insert(name, value);
+    }
+    map
 }
 
 async fn list_records(
@@ -26,9 +59,7 @@ async fn list_records(
         Err(DbError::NotFound) => {
             return (StatusCode::NOT_FOUND, "collection not found").into_response()
         }
-        Err(e) => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
-        }
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     };
 
     let sql = format!("SELECT * FROM {} ORDER BY created DESC", collection.name);
@@ -39,10 +70,11 @@ async fn list_records(
     match rows {
         Ok(rows) => {
             let records: Vec<Record> = rows
-                .into_iter()
-                .map(|_row| {
+                .iter()
+                .map(|row| {
+                    let data = row_to_map(row);
                     let mut r = Record::new(collection.clone());
-                    r.load(std::collections::HashMap::new());
+                    r.load(data);
                     r
                 })
                 .collect();
@@ -61,9 +93,7 @@ async fn get_record(
         Err(DbError::NotFound) => {
             return (StatusCode::NOT_FOUND, "collection not found").into_response()
         }
-        Err(e) => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
-        }
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     };
 
     let sql = format!("SELECT * FROM {} WHERE id = ?", collection.name);
@@ -73,10 +103,10 @@ async fn get_record(
         .await;
 
     match row {
-        Ok(Some(_row)) => {
+        Ok(Some(row)) => {
+            let data = row_to_map(&row);
             let mut r = Record::new(collection);
-            r.base.id = id;
-            r.base.mark_as_not_new();
+            r.load(data);
             (StatusCode::OK, Json(r)).into_response()
         }
         Ok(None) => (StatusCode::NOT_FOUND, "record not found").into_response(),

@@ -18,6 +18,7 @@ pub struct Record {
 
     /// The record's field values, keyed by field name.
     /// e.g. {"title": "Hello", "views": 42, "published": true}
+    #[serde(flatten)]
     pub data: HashMap<String, Value>,
 
     /// Expanded relation fields, keyed by field name.
@@ -102,6 +103,10 @@ impl Record {
     /// Load a map of values into the record's data fields.
     /// Mirrors PocketBase's record.Load(data).
     pub fn load(&mut self, data: HashMap<String, Value>) {
+        if let Some(id) = data.get("id").and_then(|v| v.as_str()) {
+            self.base.id = id.to_string();
+            self.base.mark_as_not_new();
+        }
         self.data.extend(data);
     }
 }
