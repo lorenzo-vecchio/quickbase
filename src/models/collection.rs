@@ -141,6 +141,19 @@ impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for CollectionType {
     }
 }
 
+impl std::str::FromStr for CollectionType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "auth" => Ok(Self::Auth),
+            "view" => Ok(Self::View),
+            "base" => Ok(Self::Base),
+            _ => Err(()),
+        }
+    }
+}
+
 /// Generates a random ID in PocketBase's format: 'r' + 14 hex chars.
 fn generate_id() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
