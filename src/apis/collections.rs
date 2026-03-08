@@ -1,0 +1,43 @@
+use std::sync::Arc;
+use axum::{
+    Router,
+    routing::get,
+    extract::{State, Path},
+    Json,
+    http::StatusCode,
+    response::IntoResponse,
+};
+use crate::core::App;
+use crate::db::DbError;
+
+pub fn router() -> Router<Arc<App>> {
+    Router::new()
+        .route("/", get(list_collections))
+        .route("/{name}", get(get_collection))
+}
+
+async fn list_collections(
+    State(app): State<Arc<App>>,
+) -> impl IntoResponse {
+    let rows: Result<Vec<_>, _> = sqlx::query_as::<_, crate::models::collection::Collection>(
+        "SELECT * FROM _collections ORDER BY name ASC"
+    )
+        .fetch_all(&app.pools().data)
+        .await;
+
+    match rows {
+        Ok(collections) => (StatusCode::OK, Json(collections)).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+async fn get_collection(
+    State(app): State<Arc<App>>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    match app.find_collection_by_name(&name).await {
+        Ok(c) => (StatusCode::OK, Json(c)).into_response(),
+        Err(DbError::NotFound) => (StatusCode::NOT_FOUND, "collection not found").into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
