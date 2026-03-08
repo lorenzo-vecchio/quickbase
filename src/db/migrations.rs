@@ -43,6 +43,39 @@ impl<'a> MigrationsRunner<'a> {
         Ok(())
     }
 
+    pub async fn down(&self, count: usize) -> Result<(), DbError> {
+        self.ensure_migrations_table().await?;
+
+        // get the last `count` applied migrations in reverse order
+        let applied: Vec<(String,)> = sqlx::query_as(
+            "SELECT file FROM _migrations ORDER BY applied_at DESC LIMIT ?"
+        )
+            .bind(count as i64)
+            .fetch_all(&self.pools.data)
+            .await?;
+
+        for (file,) in applied {
+            // find the matching migration in our list
+            let migration = self.list.items().iter().find(|m| m.file == file);
+            if let Some(migration) = migration {
+                if let Some(down_fn) = migration.down {
+                    down_fn(self.pools.data.clone()).await?;
+                }
+                self.mark_unapplied(&file).await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn mark_unapplied(&self, file: &str) -> Result<(), DbError> {
+        sqlx::query("DELETE FROM _migrations WHERE file = ?")
+            .bind(file)
+            .execute(&self.pools.data)
+            .await?;
+        Ok(())
+    }
+
     async fn ensure_migrations_table(&self) -> Result<(), DbError> {
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS _migrations (

@@ -77,3 +77,31 @@ async fn test_base_model_new_flag() {
     assert!(!m.is_new());
     assert_eq!(m.last_saved_pk(), "abc123");
 }
+
+#[tokio::test]
+async fn test_initial_migration_creates_system_tables() {
+    let db = common::setup_test_db().await;
+    let mut list = MigrationsList::new();
+    list.register(quickbase::migrations::initial::migration());
+
+    let runner = MigrationsRunner::new(&db, &list);
+    runner.up().await.unwrap();
+
+    assert!(db.has_table("_collections").await.unwrap());
+    assert!(db.has_table("_params").await.unwrap());
+    assert!(db.has_table("_migrations").await.unwrap());
+}
+
+#[tokio::test]
+async fn test_initial_migration_down_drops_tables() {
+    let db = common::setup_test_db().await;
+    let mut list = MigrationsList::new();
+    list.register(quickbase::migrations::initial::migration());
+
+    let runner = MigrationsRunner::new(&db, &list);
+    runner.up().await.unwrap();
+    runner.down(1).await.unwrap(); // revert 1 migration
+
+    assert!(!db.has_table("_collections").await.unwrap());
+    assert!(!db.has_table("_params").await.unwrap());
+}
