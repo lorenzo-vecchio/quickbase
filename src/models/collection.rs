@@ -113,6 +113,12 @@ impl Collection {
     }
 }
 
+impl Default for Collection {
+    fn default() -> Self {
+        Self::new_base("unknown")
+    }
+}
+
 /// Generates a random ID in PocketBase's format: 'r' + 14 hex chars.
 fn generate_id() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
