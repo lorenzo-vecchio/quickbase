@@ -9,10 +9,12 @@ use axum::{
 };
 use crate::core::App;
 use crate::db::DbError;
+use crate::models::collection::Collection;
+use crate::forms::collection_upsert::CollectionUpsert;
 
 pub fn router() -> Router<Arc<App>> {
     Router::new()
-        .route("/", get(list_collections))
+        .route("/", get(list_collections).post(create_collection))
         .route("/{name}", get(get_collection))
 }
 
@@ -39,5 +41,19 @@ async fn get_collection(
         Ok(c) => (StatusCode::OK, Json(c)).into_response(),
         Err(DbError::NotFound) => (StatusCode::NOT_FOUND, "collection not found").into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+async fn create_collection(
+    State(app): State<Arc<App>>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let collection = Collection::new_base(name);
+    let mut form = CollectionUpsert::new(&app, collection);
+    form.load(body);
+    match form.submit().await {
+        Ok(collection) => (StatusCode::CREATED, Json(collection)).into_response(),
+        Err(e) => e.into_response(),
     }
 }
