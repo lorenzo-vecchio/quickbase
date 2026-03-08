@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use crate::db::model::BaseModel;
+use crate::db::Json;
 
 /// The three collection types PocketBase supports.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -28,21 +29,23 @@ impl std::fmt::Display for CollectionType {
 
 /// Mirrors PocketBase's core.Collection model.
 /// Stored in the `_collections` table.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Collection {
     #[serde(flatten)]
+    #[sqlx(flatten)]
     pub base: BaseModel,
 
     pub name: String,
 
     #[serde(rename = "type")]
+    #[sqlx(rename = "type")]
     pub collection_type: CollectionType,
 
     /// JSON array of field definitions e.g. `[{"id":"...","name":"title","type":"text"}]`
-    pub schema: serde_json::Value,
+    pub schema: Json<serde_json::Value>,
 
     /// JSON array of CREATE INDEX statements
-    pub indexes: serde_json::Value,
+    pub indexes: Json<serde_json::Value>,
 
     // API access rules — None means the rule is not set (locked down)
     pub list_rule: Option<String>,
@@ -52,7 +55,7 @@ pub struct Collection {
     pub delete_rule: Option<String>,
 
     /// JSON blob of type-specific options (e.g. auth settings)
-    pub options: serde_json::Value,
+    pub options: Json<serde_json::Value>,
 
     pub created: String,
     pub updated: String,
@@ -79,14 +82,14 @@ impl Collection {
             base: BaseModel::new(crate::models::collection::generate_id()),
             name: name.into(),
             collection_type,
-            schema: serde_json::json!([]),
-            indexes: serde_json::json!([]),
+            schema: Json(serde_json::json!([])),
+            indexes: Json(serde_json::json!([])),
             list_rule: None,
             view_rule: None,
             create_rule: None,
             update_rule: None,
             delete_rule: None,
-            options: serde_json::json!({}),
+            options: Json(serde_json::json!([])),
             created: String::new(),
             updated: String::new(),
         }
