@@ -185,3 +185,78 @@ async fn test_record_upsert_valid_fields() {
     let record = result.unwrap();
     assert_eq!(record.get_string("title"), "Hello");
 }
+
+
+#[tokio::test]
+async fn test_collection_update_adds_column() {
+    let (app, _dir) = setup_test_app().await;
+
+    // create initial collection with just a title field
+    let collection = Collection::new_base("articles");
+    let mut form = CollectionUpsert::new(&app, collection);
+    form.load(serde_json::json!({
+        "name": "articles",
+        "schema": [
+            {"id": "f00000001", "name": "title", "type": "text", "required": true, "options": {}}
+        ]
+    }));
+    form.submit().await.unwrap();
+
+    // now update with an additional views field
+    let old = app.find_collection_by_name("articles").await.unwrap();
+    let mut form = CollectionUpsert::new(&app, old.clone());
+    form.load(serde_json::json!({
+        "name": "articles",
+        "schema": [
+            {"id": "f00000001", "name": "title", "type": "text", "required": true, "options": {}},
+            {"id": "f00000002", "name": "views", "type": "number", "required": false, "options": {}}
+        ]
+    }));
+    form.submit_update(old).await.unwrap();
+
+    // verify both columns exist
+    let result = sqlx::query(
+        "INSERT INTO articles (id, title, views, created, updated)
+         VALUES ('r001', 'Hello', 42.0, '', '')"
+    )
+        .execute(&app.pools().data)
+        .await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_collection_update_drops_column() {
+    let (app, _dir) = setup_test_app().await;
+
+    // create with two fields
+    let collection = Collection::new_base("articles");
+    let mut form = CollectionUpsert::new(&app, collection);
+    form.load(serde_json::json!({
+        "name": "articles",
+        "schema": [
+            {"id": "f00000001", "name": "title", "type": "text", "required": false, "options": {}},
+            {"id": "f00000002", "name": "views", "type": "number", "required": false, "options": {}}
+        ]
+    }));
+    form.submit().await.unwrap();
+
+    // update removing views
+    let old = app.find_collection_by_name("articles").await.unwrap();
+    let mut form = CollectionUpsert::new(&app, old.clone());
+    form.load(serde_json::json!({
+        "name": "articles",
+        "schema": [
+            {"id": "f00000001", "name": "title", "type": "text", "required": false, "options": {}}
+        ]
+    }));
+    form.submit_update(old).await.unwrap();
+
+    // verify views column is gone — inserting with it should fail
+    let result = sqlx::query(
+        "INSERT INTO articles (id, title, views, created, updated)
+         VALUES ('r001', 'Hello', 42.0, '', '')"
+    )
+        .execute(&app.pools().data)
+        .await;
+    assert!(result.is_err());
+}

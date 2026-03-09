@@ -10,13 +10,10 @@ pub struct CollectionUpsert<'a> {
 }
 
 impl<'a> CollectionUpsert<'a> {
-    /// Mirrors PocketBase's forms.NewCollectionUpsert(app, collection).
     pub fn new(app: &'a App, collection: Collection) -> Self {
         Self { app, collection }
     }
 
-    /// Populate form fields from a raw JSON body.
-    /// Mirrors PocketBase's form.LoadData(data).
     pub fn load(&mut self, data: serde_json::Value) {
         if let Some(name) = data.get("name").and_then(|v| v.as_str()) {
             self.collection.name = name.to_string();
@@ -33,8 +30,6 @@ impl<'a> CollectionUpsert<'a> {
         }
     }
 
-    /// Validate the collection fields.
-    /// Returns a FormError with one entry per invalid field.
     pub fn validate(&self) -> Result<(), FormError> {
         let mut err = FormError::new();
 
@@ -65,9 +60,7 @@ impl<'a> CollectionUpsert<'a> {
         }
     }
 
-    /// Validate and persist the collection.
-    /// Creates the SQLite table if this is a new collection.
-    /// Mirrors PocketBase's form.Submit().
+    /// Create a new collection — validates, saves to _collections, creates table.
     pub async fn submit(self) -> Result<Collection, FormError> {
         self.validate()?;
 
@@ -90,20 +83,56 @@ impl<'a> CollectionUpsert<'a> {
         Ok(self.collection)
     }
 
+    /// Update an existing collection — diffs old vs new schema, adds/drops columns.
+    pub async fn submit_update(self, old: Collection) -> Result<Collection, FormError> {
+        self.validate()?;
+
+        let old_names: std::collections::HashSet<&str> = old
+            .fields()
+            .iter()
+            .map(|f| f.name.as_str())
+            .collect();
+
+        let new_names: std::collections::HashSet<&str> = self
+            .collection
+            .fields()
+            .iter()
+            .map(|f| f.name.as_str())
+            .collect();
+
+        // drop removed columns
+        for name in &old_names {
+            if !new_names.contains(name) {
+                self.drop_column(name).await.map_err(|e| {
+                    let mut err = FormError::new();
+                    err.add("_", "db_error", e.to_string());
+                    err
+                })?;
+            }
+        }
+
+        // add new columns
+        for field in self.collection.fields() {
+            if !old_names.contains(field.name.as_str()) {
+                self.add_column(field).await.map_err(|e| {
+                    let mut err = FormError::new();
+                    err.add("_", "db_error", e.to_string());
+                    err
+                })?;
+            }
+        }
+
+        self.save_collection().await.map_err(|e| {
+            let mut err = FormError::new();
+            err.add("_", "db_error", e.to_string());
+            err
+        })?;
+
+        Ok(self.collection)
+    }
+
     async fn save_collection(&self) -> Result<(), DbError> {
-        sqlx::query(
-            "INSERT OR REPLACE INTO _collections (id, name, type, schema, indexes, options)
-             VALUES (?, ?, ?, ?, ?, ?)"
-        )
-            .bind(&self.collection.base.id)
-            .bind(&self.collection.name)
-            .bind(self.collection.collection_type.to_string())
-            .bind(serde_json::to_string(&*self.collection.schema).unwrap_or_default())
-            .bind(serde_json::to_string(&*self.collection.indexes).unwrap_or_default())
-            .bind(serde_json::to_string(&*self.collection.options).unwrap_or_default())
-            .execute(&self.app.pools().data)
-            .await?;
-        Ok(())
+        self.app.save_collection(&self.collection).await
     }
 
     async fn create_table(&self) -> Result<(), DbError> {
@@ -127,6 +156,31 @@ impl<'a> CollectionUpsert<'a> {
             columns.join(", ")
         );
 
+        sqlx::query(&sql)
+            .execute(&self.app.pools().data)
+            .await?;
+        Ok(())
+    }
+
+    async fn add_column(&self, field: &SchemaField) -> Result<(), DbError> {
+        let sql = format!(
+            "ALTER TABLE {} ADD COLUMN {} {} DEFAULT '' NOT NULL",
+            self.collection.name,
+            field.name,
+            field.sqlite_type()
+        );
+        sqlx::query(&sql)
+            .execute(&self.app.pools().data)
+            .await?;
+        Ok(())
+    }
+
+    async fn drop_column(&self, column: &str) -> Result<(), DbError> {
+        let sql = format!(
+            "ALTER TABLE {} DROP COLUMN {}",
+            self.collection.name,
+            column
+        );
         sqlx::query(&sql)
             .execute(&self.app.pools().data)
             .await?;

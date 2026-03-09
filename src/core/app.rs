@@ -61,4 +61,20 @@ impl App {
             .await?
             .ok_or(DbError::NotFound)
     }
+
+    pub async fn save_collection(&self, collection: &Collection) -> Result<(), DbError> {
+        sqlx::query(
+            "INSERT OR REPLACE INTO _collections (id, name, type, schema, indexes, options)
+         VALUES (?, ?, ?, ?, ?, ?)"
+        )
+            .bind(&collection.base.id)
+            .bind(&collection.name)
+            .bind(collection.collection_type.to_string())
+            .bind(serde_json::to_string(&*collection.schema).unwrap_or_default())
+            .bind(serde_json::to_string(&*collection.indexes).unwrap_or_default())
+            .bind(serde_json::to_string(&*collection.options).unwrap_or_default())
+            .execute(&self.pools().data)
+            .await?;
+        Ok(())
+    }
 }
