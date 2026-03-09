@@ -45,7 +45,7 @@ fn test_collection_default_rules_are_none() {
 #[test]
 fn test_collection_default_schema_is_empty_array() {
     let c = Collection::new_base("articles");
-    assert_eq!(*c.schema, serde_json::json!([]));
+    assert!(c.schema.is_empty());
     assert_eq!(*c.indexes, serde_json::json!([]));
 }
 

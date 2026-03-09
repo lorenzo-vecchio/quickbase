@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use crate::db::model::BaseModel;
 use crate::db::Json;
+use crate::models::schema::SchemaField;
 
 /// The three collection types PocketBase supports.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -42,7 +43,7 @@ pub struct Collection {
     pub collection_type: CollectionType,
 
     /// JSON array of field definitions e.g. `[{"id":"...","name":"title","type":"text"}]`
-    pub schema: Json<serde_json::Value>,
+    pub schema: Json<Vec<SchemaField>>,
 
     /// JSON array of CREATE INDEX statements
     pub indexes: Json<serde_json::Value>,
@@ -82,7 +83,7 @@ impl Collection {
             base: BaseModel::new(crate::models::collection::generate_id()),
             name: name.into(),
             collection_type,
-            schema: Json(serde_json::json!([])),
+            schema: Json(vec![]),
             indexes: Json(serde_json::json!([])),
             list_rule: None,
             view_rule: None,
@@ -113,6 +114,20 @@ impl Collection {
 
     pub fn table_name() -> &'static str {
         "_collections"
+    }
+
+    pub fn fields(&self) -> &Vec<SchemaField> {
+        &self.schema
+    }
+
+    /// Add a field to the schema.
+    pub fn add_field(&mut self, field: SchemaField) {
+        self.schema.0.push(field);
+    }
+
+    /// Find a field by name.
+    pub fn field_by_name(&self, name: &str) -> Option<&SchemaField> {
+        self.schema.0.iter().find(|f| f.name == name)
     }
 }
 

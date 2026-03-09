@@ -12,10 +12,11 @@ use sqlx::Row;
 use crate::core::App;
 use crate::db::DbError;
 use crate::models::record::Record;
+use crate::forms::record_upsert::RecordUpsert;
 
 pub fn router() -> Router<Arc<App>> {
     Router::new()
-        .route("/", get(list_records))
+        .route("/", get(list_records).post(create_record))
         .route("/{id}", get(get_record))
 }
 
@@ -111,5 +112,27 @@ async fn get_record(
         }
         Ok(None) => (StatusCode::NOT_FOUND, "record not found").into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+async fn create_record(
+    State(app): State<Arc<App>>,
+    Path(name): Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let collection = match app.find_collection_by_name(&name).await {
+        Ok(c) => c,
+        Err(DbError::NotFound) => {
+            return (StatusCode::NOT_FOUND, "collection not found").into_response()
+        }
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    };
+
+    let record = Record::new(collection);
+    let mut form = RecordUpsert::new(&app, record);
+    form.load(body);
+    match form.submit().await {
+        Ok(record) => (StatusCode::CREATED, Json(record)).into_response(),
+        Err(e) => e.into_response(),
     }
 }

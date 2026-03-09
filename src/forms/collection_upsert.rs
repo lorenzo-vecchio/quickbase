@@ -1,5 +1,6 @@
 use crate::core::app::App;
 use crate::models::collection::Collection;
+use crate::models::schema::SchemaField;
 use crate::forms::errors::FormError;
 use crate::db::DbError;
 
@@ -25,6 +26,11 @@ impl<'a> CollectionUpsert<'a> {
                 self.collection.collection_type = ct;
             }
         }
+        if let Some(schema) = data.get("schema") {
+            if let Ok(fields) = serde_json::from_value::<Vec<SchemaField>>(schema.clone()) {
+                self.collection.schema = crate::db::Json(fields);
+            }
+        }
     }
 
     /// Validate the collection fields.
@@ -32,11 +38,9 @@ impl<'a> CollectionUpsert<'a> {
     pub fn validate(&self) -> Result<(), FormError> {
         let mut err = FormError::new();
 
-        // name must not be empty
         if self.collection.name.is_empty() {
             err.add("name", "validation_required", "Name is required.");
         } else {
-            // name must be alphanumeric + underscores only
             let valid = self.collection.name
                 .chars()
                 .all(|c| c.is_alphanumeric() || c == '_');
@@ -48,7 +52,6 @@ impl<'a> CollectionUpsert<'a> {
                 );
             }
 
-            // reserved names
             let reserved = ["_collections", "_migrations", "sqlite_master"];
             if reserved.contains(&self.collection.name.as_str()) {
                 err.add("name", "validation_reserved_name", "Name is reserved.");
@@ -70,14 +73,12 @@ impl<'a> CollectionUpsert<'a> {
 
         let is_new = self.collection.base.is_new();
 
-        // save to _collections
         self.save_collection().await.map_err(|e| {
             let mut err = FormError::new();
             err.add("_", "db_error", e.to_string());
             err
         })?;
 
-        // create the table for new collections
         if is_new {
             self.create_table().await.map_err(|e| {
                 let mut err = FormError::new();
@@ -106,14 +107,26 @@ impl<'a> CollectionUpsert<'a> {
     }
 
     async fn create_table(&self) -> Result<(), DbError> {
+        let mut columns = vec![
+            "id      TEXT PRIMARY KEY DEFAULT ''".to_string(),
+            "created TEXT DEFAULT '' NOT NULL".to_string(),
+            "updated TEXT DEFAULT '' NOT NULL".to_string(),
+        ];
+
+        for field in self.collection.fields() {
+            columns.push(format!(
+                "{} {} DEFAULT '' NOT NULL",
+                field.name,
+                field.sqlite_type()
+            ));
+        }
+
         let sql = format!(
-            "CREATE TABLE IF NOT EXISTS {} (
-                id      TEXT PRIMARY KEY DEFAULT '',
-                created TEXT DEFAULT '' NOT NULL,
-                updated TEXT DEFAULT '' NOT NULL
-            )",
-            self.collection.name
+            "CREATE TABLE IF NOT EXISTS {} ({})",
+            self.collection.name,
+            columns.join(", ")
         );
+
         sqlx::query(&sql)
             .execute(&self.app.pools().data)
             .await?;
