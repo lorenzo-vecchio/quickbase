@@ -15,7 +15,7 @@ use crate::forms::collection_upsert::CollectionUpsert;
 pub fn router() -> Router<Arc<App>> {
     Router::new()
         .route("/", get(list_collections).post(create_collection))
-        .route("/{name}", get(get_collection).patch(update_collection))
+        .route("/{name}", get(get_collection).patch(update_collection).delete(delete_collection))
 }
 
 async fn list_collections(State(app): State<Arc<App>>) -> impl IntoResponse {
@@ -69,5 +69,23 @@ async fn update_collection(
     match form.submit_update(old).await {
         Ok(collection) => (StatusCode::OK, Json(collection)).into_response(),
         Err(e) => e.into_response(),
+    }
+}
+
+async fn delete_collection(
+    State(app): State<Arc<App>>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    let collection = match app.find_collection_by_name(&name).await {
+        Ok(c) => c,
+        Err(DbError::NotFound) => {
+            return (StatusCode::NOT_FOUND, "collection not found").into_response()
+        }
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    };
+
+    match app.delete_collection(&collection).await {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
 }

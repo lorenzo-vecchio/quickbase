@@ -349,3 +349,68 @@ async fn test_create_record_collection_not_found() {
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn test_delete_collection() {
+    let (app, _dir) = setup_test_app().await;
+
+    // create a collection first
+    let router = quickbase::apis::router(Arc::clone(&app));
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/collections")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"name": "articles"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // delete it
+    let router = quickbase::apis::router(Arc::clone(&app));
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/collections/articles")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    // verify it's gone
+    let router = quickbase::apis::router(Arc::clone(&app));
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/collections/articles")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_delete_collection_not_found() {
+    let (app, _dir) = setup_test_app().await;
+    let router = quickbase::apis::router(Arc::clone(&app));
+
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/collections/nonexistent")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}

@@ -77,4 +77,18 @@ impl App {
             .await?;
         Ok(())
     }
+
+    pub async fn delete_collection(&self, collection: &Collection) -> Result<(), DbError> {
+        let sql = format!("DROP TABLE IF EXISTS {}", collection.name);
+        sqlx::query(&sql)
+            .execute(&self.pools().data)
+            .await?;
+
+        sqlx::query("DELETE FROM _collections WHERE id = ?")
+            .bind(&collection.base.id)
+            .execute(&self.pools().data)
+            .await?;
+
+        Ok(())
+    }
 }
