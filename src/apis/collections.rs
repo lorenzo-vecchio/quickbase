@@ -18,16 +18,8 @@ pub fn router() -> Router<Arc<App>> {
         .route("/{name}", get(get_collection))
 }
 
-async fn list_collections(
-    State(app): State<Arc<App>>,
-) -> impl IntoResponse {
-    let rows: Result<Vec<_>, _> = sqlx::query_as::<_, crate::models::collection::Collection>(
-        "SELECT * FROM _collections ORDER BY name ASC"
-    )
-        .fetch_all(&app.pools().data)
-        .await;
-
-    match rows {
+async fn list_collections(State(app): State<Arc<App>>) -> impl IntoResponse {
+    match app.list_collections().await {
         Ok(collections) => (StatusCode::OK, Json(collections)).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }

@@ -42,4 +42,23 @@ impl App {
             .await?
             .ok_or(DbError::NotFound)
     }
+
+    pub async fn list_collections(&self) -> Result<Vec<Collection>, DbError> {
+        let collections = sqlx::query_as::<_, Collection>(
+            "SELECT * FROM _collections ORDER BY name ASC"
+        )
+            .fetch_all(&self.pools().data)
+            .await?;
+        Ok(collections)
+    }
+
+    pub async fn find_collection_by_id(&self, id: &str) -> Result<Collection, DbError> {
+        sqlx::query_as::<_, Collection>(
+            "SELECT * FROM _collections WHERE id = ? LIMIT 1"
+        )
+            .bind(id)
+            .fetch_optional(&self.pools().data)
+            .await?
+            .ok_or(DbError::NotFound)
+    }
 }
