@@ -414,3 +414,146 @@ async fn test_delete_collection_not_found() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn test_update_record() {
+    let (app, _dir) = setup_test_app().await;
+
+    sqlx::query(
+        "INSERT INTO _collections (id, name, type, schema, indexes, options)
+         VALUES ('r00000000000001', 'articles', 'base', '[]', '[]', '{}')"
+    )
+        .execute(&app.pools().data)
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "CREATE TABLE articles (
+            id      TEXT PRIMARY KEY,
+            title   TEXT NOT NULL DEFAULT '',
+            created TEXT NOT NULL DEFAULT '',
+            updated TEXT NOT NULL DEFAULT ''
+        )"
+    )
+        .execute(&app.pools().data)
+        .await
+        .unwrap();
+
+    sqlx::query("INSERT INTO articles (id, title, created, updated) VALUES ('r001', 'Hello', '', '')")
+        .execute(&app.pools().data)
+        .await
+        .unwrap();
+
+    let router = quickbase::apis::router(Arc::clone(&app));
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/collections/articles/records/r001")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"title": "Updated"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["title"], "Updated");
+    assert_eq!(json["id"], "r001");
+}
+
+#[tokio::test]
+async fn test_delete_record() {
+    let (app, _dir) = setup_test_app().await;
+
+    sqlx::query(
+        "INSERT INTO _collections (id, name, type, schema, indexes, options)
+         VALUES ('r00000000000001', 'articles', 'base', '[]', '[]', '{}')"
+    )
+        .execute(&app.pools().data)
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "CREATE TABLE articles (
+            id      TEXT PRIMARY KEY,
+            created TEXT NOT NULL DEFAULT '',
+            updated TEXT NOT NULL DEFAULT ''
+        )"
+    )
+        .execute(&app.pools().data)
+        .await
+        .unwrap();
+
+    sqlx::query("INSERT INTO articles (id, created, updated) VALUES ('r001', '', '')")
+        .execute(&app.pools().data)
+        .await
+        .unwrap();
+
+    let router = quickbase::apis::router(Arc::clone(&app));
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/collections/articles/records/r001")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    // verify it's gone
+    let router = quickbase::apis::router(Arc::clone(&app));
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/collections/articles/records/r001")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_delete_record_not_found() {
+    let (app, _dir) = setup_test_app().await;
+
+    sqlx::query(
+        "INSERT INTO _collections (id, name, type, schema, indexes, options)
+         VALUES ('r00000000000001', 'articles', 'base', '[]', '[]', '{}')"
+    )
+        .execute(&app.pools().data)
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "CREATE TABLE articles (
+            id      TEXT PRIMARY KEY,
+            created TEXT NOT NULL DEFAULT '',
+            updated TEXT NOT NULL DEFAULT ''
+        )"
+    )
+        .execute(&app.pools().data)
+        .await
+        .unwrap();
+
+    let router = quickbase::apis::router(Arc::clone(&app));
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/collections/articles/records/doesnotexist")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}

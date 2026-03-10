@@ -17,7 +17,7 @@ use crate::forms::record_upsert::RecordUpsert;
 pub fn router() -> Router<Arc<App>> {
     Router::new()
         .route("/", get(list_records).post(create_record))
-        .route("/{id}", get(get_record))
+        .route("/{id}", get(get_record).patch(update_record).delete(delete_record))
 }
 
 fn row_to_map(row: &sqlx::sqlite::SqliteRow) -> HashMap<String, serde_json::Value> {
@@ -134,5 +134,69 @@ async fn create_record(
     match form.submit().await {
         Ok(record) => (StatusCode::CREATED, Json(record)).into_response(),
         Err(e) => e.into_response(),
+    }
+}
+
+async fn update_record(
+    State(app): State<Arc<App>>,
+    Path((name, id)): Path<(String, String)>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let collection = match app.find_collection_by_name(&name).await {
+        Ok(c) => c,
+        Err(DbError::NotFound) => {
+            return (StatusCode::NOT_FOUND, "collection not found").into_response()
+        }
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    };
+
+    // fetch the existing record
+    let sql = format!("SELECT * FROM {} WHERE id = ?", collection.name);
+    let row = sqlx::query(&sql)
+        .bind(&id)
+        .fetch_optional(&app.pools().data)
+        .await;
+
+    let row = match row {
+        Ok(Some(r)) => r,
+        Ok(None) => return (StatusCode::NOT_FOUND, "record not found").into_response(),
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    };
+
+    let data = row_to_map(&row);
+    let mut record = Record::new(collection);
+    record.load(data);
+
+    let mut form = RecordUpsert::new(&app, record);
+    form.load(body);
+    match form.submit().await {
+        Ok(record) => (StatusCode::OK, Json(record)).into_response(),
+        Err(e) => e.into_response(),
+    }
+}
+
+async fn delete_record(
+    State(app): State<Arc<App>>,
+    Path((name, id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    let collection = match app.find_collection_by_name(&name).await {
+        Ok(c) => c,
+        Err(DbError::NotFound) => {
+            return (StatusCode::NOT_FOUND, "collection not found").into_response()
+        }
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    };
+
+    let sql = format!("DELETE FROM {} WHERE id = ?", collection.name);
+    match sqlx::query(&sql)
+        .bind(&id)
+        .execute(&app.pools().data)
+        .await
+    {
+        Ok(result) if result.rows_affected() == 0 => {
+            (StatusCode::NOT_FOUND, "record not found").into_response()
+        }
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
 }
