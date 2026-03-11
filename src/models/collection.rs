@@ -171,11 +171,5 @@ impl std::str::FromStr for CollectionType {
 
 /// Generates a random ID in PocketBase's format: 'r' + 14 hex chars.
 fn generate_id() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    // Simple deterministic-enough ID for now; we'll replace with proper random later
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .subsec_nanos();
-    format!("r{:014x}", nanos)
+    crate::tools::security::generate_id()
 }

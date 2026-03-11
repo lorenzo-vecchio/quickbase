@@ -112,10 +112,5 @@ impl Record {
 }
 
 fn generate_id() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .subsec_nanos();
-    format!("r{:014x}", nanos)
+    crate::tools::security::generate_id()
 }

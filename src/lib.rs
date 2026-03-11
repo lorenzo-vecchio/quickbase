@@ -5,3 +5,4 @@ pub mod core;
 pub mod apis;
 pub mod cmd;
 pub mod forms;
+pub mod tools;
