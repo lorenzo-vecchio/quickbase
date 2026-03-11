@@ -9,25 +9,32 @@ pub struct RecordUpsert<'a> {
     app: &'a App,
     record: Record,
     data: HashMap<String, Value>,
+    password: Option<String>,
 }
 
 impl<'a> RecordUpsert<'a> {
-    /// Mirrors PocketBase's forms.NewRecordUpsert(app, record).
     pub fn new(app: &'a App, record: Record) -> Self {
         Self {
             app,
             record,
             data: HashMap::new(),
+            password: None,
         }
     }
 
     /// Load field values from a raw JSON body.
-    /// Mirrors PocketBase's form.LoadData(data).
     pub fn load(&mut self, body: serde_json::Value) {
         if let Some(map) = body.as_object() {
             for (k, v) in map {
                 // never allow the client to set system fields
                 if matches!(k.as_str(), "id" | "created" | "updated") {
+                    continue;
+                }
+                // for auth collections, pull password out separately
+                if k == "password" && self.record.collection.is_auth() {
+                    if let Some(s) = v.as_str() {
+                        self.password = Some(s.to_string());
+                    }
                     continue;
                 }
                 self.data.insert(k.clone(), v.clone());
@@ -44,7 +51,6 @@ impl<'a> RecordUpsert<'a> {
         for field in self.record.collection.fields() {
             let value = self.data.get(&field.name);
 
-            // check required fields
             if field.required {
                 let is_empty = match value {
                     None => true,
@@ -62,7 +68,6 @@ impl<'a> RecordUpsert<'a> {
                 }
             }
 
-            // type validation — only check if a value was actually provided
             if let Some(value) = value {
                 if value.is_null() {
                     continue;
@@ -74,17 +79,13 @@ impl<'a> RecordUpsert<'a> {
                     | FieldType::Email
                     | FieldType::Url
                     | FieldType::Date  => value.is_string(),
-                    FieldType::Json    => true, // any JSON value is valid
+                    FieldType::Json    => true,
                 };
                 if !type_ok {
                     err.add(
                         &field.name,
                         "validation_invalid_type",
-                        format!(
-                            "{} must be a {}.",
-                            field.name,
-                            field.field_type
-                        ),
+                        format!("{} must be a {}.", field.name, field.field_type),
                     );
                 }
             }
@@ -97,8 +98,6 @@ impl<'a> RecordUpsert<'a> {
         }
     }
 
-    /// Validate and persist the record.
-    /// Mirrors PocketBase's form.Submit().
     pub async fn submit(mut self) -> Result<Record, FormError> {
         self.validate()?;
 
@@ -126,13 +125,34 @@ impl<'a> RecordUpsert<'a> {
         self.record.created = now.clone();
         self.record.updated = now.clone();
 
-        // build column list and placeholders dynamically
         let mut columns = vec!["id", "created", "updated"];
         let mut values: Vec<Value> = vec![
             Value::String(self.record.base.id.clone()),
             Value::String(now.clone()),
             Value::String(now.clone()),
         ];
+
+        // auth collections: hash password if provided, generate tokenKey
+        if self.record.collection.is_auth() {
+            use crate::tools::security::{hash_password, generate_id};
+
+            let hashed = if let Some(ref pw) = self.password {
+                hash_password(pw).map_err(|e| DbError::Migration(e.to_string()))?
+            } else {
+                String::new()
+            };
+
+            columns.push("email");
+            values.push(
+                self.data.remove("email").unwrap_or(Value::String(String::new()))
+            );
+            columns.push("password");
+            values.push(Value::String(hashed));
+            columns.push("tokenKey");
+            values.push(Value::String(generate_id()));
+            columns.push("verified");
+            values.push(Value::Bool(false));
+        }
 
         for (col, val) in &self.data {
             columns.push(col.as_str());
@@ -152,19 +172,15 @@ impl<'a> RecordUpsert<'a> {
             query = match val {
                 Value::String(s) => query.bind(s.clone()),
                 Value::Number(n) => query.bind(n.as_f64().unwrap_or(0.0)),
-                Value::Bool(b) => query.bind(*b),
-                _ => query.bind(val.to_string()),
+                Value::Bool(b)   => query.bind(*b),
+                _                => query.bind(val.to_string()),
             };
         }
 
         query.execute(&self.app.pools().data).await?;
 
-        // load the saved data back into the record
         self.record.load(
-            self.data
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
+            self.data.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
         );
 
         Ok(())
@@ -192,8 +208,8 @@ impl<'a> RecordUpsert<'a> {
             query = match val {
                 Value::String(s) => query.bind(s.clone()),
                 Value::Number(n) => query.bind(n.as_f64().unwrap_or(0.0)),
-                Value::Bool(b) => query.bind(*b),
-                _ => query.bind(val.to_string()),
+                Value::Bool(b)   => query.bind(*b),
+                _                => query.bind(val.to_string()),
             };
         }
         query = query.bind(now).bind(self.record.base.id.clone());
@@ -211,7 +227,6 @@ fn now_utc() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    // format as SQLite-compatible UTC string
     let (y, mo, d, h, min, s) = secs_to_datetime(secs);
     format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}Z", y, mo, d, h, min, s)
 }
@@ -221,7 +236,6 @@ fn secs_to_datetime(secs: u64) -> (u64, u64, u64, u64, u64, u64) {
     let min = (secs / 60) % 60;
     let h = (secs / 3600) % 24;
     let days = secs / 86400;
-    // days since 1970-01-01
     let y = days / 365 + 1970;
     let mo = (days % 365) / 30 + 1;
     let d = (days % 365) % 30 + 1;

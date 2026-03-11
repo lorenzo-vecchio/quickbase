@@ -14,5 +14,5 @@ axum = "0.8.8"
 tower = { version = "0.5.3", features = ["util"] }
 rand = "0.10.0"
 argon2 = "0.5.3"
-jsonwebtoken = "10.3.0"
+jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
