@@ -4,6 +4,7 @@ use crate::db::model::BaseModel;
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Admin {
     #[sqlx(flatten)]
+    #[serde(flatten)]
     pub base: BaseModel,
 
     pub email: String,

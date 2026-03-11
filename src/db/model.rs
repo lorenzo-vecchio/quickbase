@@ -18,8 +18,10 @@ pub trait Model: Send + Sync {
 pub struct BaseModel {
     pub id: String,
     #[sqlx(skip)]
+    #[serde(skip)]
     is_new: bool,
     #[sqlx(skip)]
+    #[serde(skip)]
     last_saved_pk: String,
 }
 
