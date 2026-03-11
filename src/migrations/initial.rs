@@ -46,6 +46,20 @@ fn up(pool: SqlitePool) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + Se
             .execute(&pool)
             .await?;
 
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS _admins (
+                id       TEXT PRIMARY KEY DEFAULT ('r'||lower(hex(randomblob(7)))),
+                email    TEXT NOT NULL UNIQUE,
+                password TEXT NOT NULL DEFAULT '',
+                tokenKey TEXT NOT NULL DEFAULT '',
+                avatar   INTEGER NOT NULL DEFAULT 0,
+                created  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%fZ')),
+                updated  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%fZ'))
+            )",
+        )
+            .execute(&pool)
+            .await?;
+
         Ok(())
     })
 }
@@ -56,6 +70,9 @@ fn down(pool: SqlitePool) -> Pin<Box<dyn Future<Output = Result<(), DbError>> + 
             .execute(&pool)
             .await?;
         sqlx::query("DROP TABLE IF EXISTS _params")
+            .execute(&pool)
+            .await?;
+        sqlx::query("DROP TABLE IF EXISTS _admins")
             .execute(&pool)
             .await?;
         Ok(())
