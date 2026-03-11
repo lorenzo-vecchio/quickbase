@@ -142,6 +142,14 @@ impl<'a> CollectionUpsert<'a> {
             "updated TEXT DEFAULT '' NOT NULL".to_string(),
         ];
 
+        // auth collections get extra system columns
+        if self.collection.is_auth() {
+            columns.push("email      TEXT NOT NULL DEFAULT ''".to_string());
+            columns.push("password   TEXT NOT NULL DEFAULT ''".to_string());
+            columns.push("tokenKey   TEXT NOT NULL DEFAULT ''".to_string());
+            columns.push("verified   INTEGER NOT NULL DEFAULT 0".to_string());
+        }
+
         for field in self.collection.fields() {
             columns.push(format!(
                 "{} {} DEFAULT '' NOT NULL",
