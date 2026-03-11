@@ -37,7 +37,7 @@ The goal is not to replace PocketBase — it's to learn Rust by building somethi
 cargo run
 ```
 
-The server starts on `0.0.0.0:8090` and creates a `./pb_data/` directory for the database.
+The server starts on `0.0.0.0:8090` and creates a `./qb_data/` directory for the database.
 
 ```bash
 # Create a collection
