@@ -10,6 +10,7 @@ pub struct RecordUpsert<'a> {
     record: Record,
     data: HashMap<String, Value>,
     password: Option<String>,
+    password_confirm: Option<String>,
 }
 
 impl<'a> RecordUpsert<'a> {
@@ -19,6 +20,7 @@ impl<'a> RecordUpsert<'a> {
             record,
             data: HashMap::new(),
             password: None,
+            password_confirm: None,
         }
     }
 
@@ -34,6 +36,12 @@ impl<'a> RecordUpsert<'a> {
                 if k == "password" && self.record.collection.is_auth() {
                     if let Some(s) = v.as_str() {
                         self.password = Some(s.to_string());
+                    }
+                    continue;
+                }
+                if k == "passwordConfirm" && self.record.collection.is_auth() {
+                    if let Some(s) = v.as_str() {
+                        self.password_confirm = Some(s.to_string());
                     }
                     continue;
                 }
@@ -87,6 +95,14 @@ impl<'a> RecordUpsert<'a> {
                         "validation_invalid_type",
                         format!("{} must be a {}.", field.name, field.field_type),
                     );
+                }
+            }
+        }
+        
+        if self.record.collection.is_auth() {
+            if let (Some(pw), Some(confirm)) = (&self.password, &self.password_confirm) {
+                if pw != confirm {
+                    err.add("passwordConfirm", "validation_mismatch", "passwords do not match.".to_string());
                 }
             }
         }

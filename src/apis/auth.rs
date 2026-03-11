@@ -11,7 +11,7 @@ use sqlx::Column;
 
 #[derive(Deserialize)]
 pub struct PasswordLoginPayload {
-    pub email: String,
+    pub identity: String,
     pub password: String,
 }
 
@@ -39,7 +39,7 @@ pub async fn auth_with_password(
     let row = sqlx::query(
         &format!("SELECT * FROM {} WHERE email = ? LIMIT 1", collection.name)
     )
-        .bind(&payload.email)
+        .bind(&payload.identity)
         .fetch_optional(&app.pools().data)
         .await;
 
@@ -89,4 +89,13 @@ pub async fn auth_with_password(
         "token": token,
         "record": record_json,
     }))).into_response()
+}
+
+pub async fn auth_methods() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "mfa": { "enabled": false, "duration": 0 },
+        "otp": { "enabled": false, "duration": 0 },
+        "password": { "enabled": true, "identityFields": ["email"] },
+        "oauth2": { "enabled": false, "providers": [] }
+    })))
 }

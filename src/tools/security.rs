@@ -10,8 +10,6 @@ use serde::{Serialize, Deserialize};
 
 const ID_LENGTH: usize = 15;
 
-/// Generates a random 15-character alphanumeric ID.
-/// Mirrors PocketBase's security.RandomString(15).
 pub fn generate_id() -> String {
     let mut rng = rand::rng();
     (0..ID_LENGTH)
@@ -36,33 +34,54 @@ pub fn verify_password(password: &str, hash: &str) -> bool {
         .is_ok()
 }
 
-const JWT_SECRET: &[u8] = b"changeme_secret_key"; // will make configurable later
+const JWT_SECRET: &[u8] = b"changeme_secret_key";
 
 #[derive(Serialize, Deserialize)]
 pub struct AuthClaims {
-    pub sub: String,        // record id
-    pub collection: String, // collection name
-    pub exp: usize,         // expiry timestamp
+    pub id: String,
+    #[serde(rename = "collectionId")]
+    pub collection_id: String,
+    #[serde(rename = "type")]
+    pub token_type: String,
+    pub exp: usize,
+    #[serde(default)]
+    pub installer: bool,
 }
 
-pub fn generate_auth_token(record_id: &str, collection: &str) -> Result<String, jsonwebtoken::errors::Error> {
+pub fn generate_auth_token(record_id: &str, collection_id: &str) -> Result<String, jsonwebtoken::errors::Error> {
     use std::time::{SystemTime, UNIX_EPOCH};
     let exp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
-        .as_secs() as usize + 7 * 24 * 3600; // 7 days
+        .as_secs() as usize + 7 * 24 * 3600;
 
     let claims = AuthClaims {
-        sub: record_id.to_string(),
-        collection: collection.to_string(),
+        id: record_id.to_string(),
+        collection_id: collection_id.to_string(),
+        token_type: "authRecord".to_string(),
         exp,
+        installer: false,
     };
 
-    encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(JWT_SECRET),
-    )
+    encode(&Header::default(), &claims, &EncodingKey::from_secret(JWT_SECRET))
+}
+
+pub fn generate_installer_token(record_id: &str, collection_id: &str) -> Result<String, jsonwebtoken::errors::Error> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let exp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as usize + 30 * 60;
+
+    let claims = AuthClaims {
+        id: record_id.to_string(),
+        collection_id: collection_id.to_string(),
+        token_type: "authRecord".to_string(),
+        exp,
+        installer: true,
+    };
+
+    encode(&Header::default(), &claims, &EncodingKey::from_secret(JWT_SECRET))
 }
 
 pub fn verify_auth_token(token: &str) -> Result<AuthClaims, jsonwebtoken::errors::Error> {

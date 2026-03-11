@@ -16,3 +16,4 @@ rand = "0.10.0"
 argon2 = "0.5.3"
 jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
+include_dir = "0.7.4"
