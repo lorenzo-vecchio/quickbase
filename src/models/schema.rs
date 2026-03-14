@@ -11,18 +11,30 @@ pub enum FieldType {
     Json,
     Email,
     Url,
+    Select,
+    Relation,
+    File,
+    Editor,
+    Autodate,
+    Password,
 }
 
 impl std::fmt::Display for FieldType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Text => write!(f, "text"),
-            Self::Number => write!(f, "number"),
-            Self::Bool => write!(f, "bool"),
-            Self::Date => write!(f, "date"),
-            Self::Json => write!(f, "json"),
-            Self::Email => write!(f, "email"),
-            Self::Url => write!(f, "url"),
+            Self::Text     => write!(f, "text"),
+            Self::Number   => write!(f, "number"),
+            Self::Bool     => write!(f, "bool"),
+            Self::Date     => write!(f, "date"),
+            Self::Json     => write!(f, "json"),
+            Self::Email    => write!(f, "email"),
+            Self::Url      => write!(f, "url"),
+            Self::Select   => write!(f, "select"),
+            Self::Relation => write!(f, "relation"),
+            Self::File     => write!(f, "file"),
+            Self::Editor   => write!(f, "editor"),
+            Self::Autodate => write!(f, "autodate"),
+            Self::Password => write!(f, "password"),
         }
     }
 }
@@ -32,14 +44,20 @@ impl std::str::FromStr for FieldType {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "text"   => Ok(Self::Text),
-            "number" => Ok(Self::Number),
-            "bool"   => Ok(Self::Bool),
-            "date"   => Ok(Self::Date),
-            "json"   => Ok(Self::Json),
-            "email"  => Ok(Self::Email),
-            "url"    => Ok(Self::Url),
-            _        => Err(()),
+            "text"     => Ok(Self::Text),
+            "number"   => Ok(Self::Number),
+            "bool"     => Ok(Self::Bool),
+            "date"     => Ok(Self::Date),
+            "json"     => Ok(Self::Json),
+            "email"    => Ok(Self::Email),
+            "url"      => Ok(Self::Url),
+            "select"   => Ok(Self::Select),
+            "relation" => Ok(Self::Relation),
+            "file"     => Ok(Self::File),
+            "editor"   => Ok(Self::Editor),
+            "autodate" => Ok(Self::Autodate),
+            "password" => Ok(Self::Password),
+            _          => Err(()),
         }
     }
 }
@@ -62,6 +80,14 @@ pub struct SchemaField {
     #[serde(default)]
     pub required: bool,
 
+    /// Whether this is a primary key field (system).
+    #[serde(default, rename = "primaryKey")]
+    pub primary_key: bool,
+
+    /// Whether the field is hidden in the API.
+    #[serde(default)]
+    pub hidden: bool,
+
     /// Type-specific options, e.g. min/max for text, choices for select.
     #[serde(default)]
     pub options: serde_json::Value,
@@ -74,6 +100,8 @@ impl SchemaField {
             name: name.into(),
             field_type,
             required: false,
+            primary_key: false,
+            hidden: false,
             options: serde_json::json!({}),
         }
     }
@@ -82,9 +110,9 @@ impl SchemaField {
     /// Mirrors PocketBase's field-to-column type mapping.
     pub fn sqlite_type(&self) -> &'static str {
         match self.field_type {
-            FieldType::Number => "REAL",
-            FieldType::Bool   => "INTEGER",
-            _ => "TEXT",
+            FieldType::Number   => "REAL",
+            FieldType::Bool     => "INTEGER",
+            _                   => "TEXT",
         }
     }
 }

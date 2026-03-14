@@ -61,7 +61,7 @@ async fn test_auth_login_success() {
     create_auth_collection(&router).await;
     register_user(&router, "test@example.com", "secret123").await;
 
-    let body = json!({ "email": "test@example.com", "password": "secret123" });
+    let body = json!({ "identity": "test@example.com", "password": "secret123" });
     let res = router.clone()
         .oneshot(
             Request::builder()
@@ -94,7 +94,7 @@ async fn test_auth_login_wrong_password() {
     create_auth_collection(&router).await;
     register_user(&router, "test@example.com", "secret123").await;
 
-    let body = json!({ "email": "test@example.com", "password": "wrongpassword" });
+    let body = json!({ "identity": "test@example.com", "password": "wrongpassword" });
     let res = router.clone()
         .oneshot(
             Request::builder()
@@ -117,7 +117,7 @@ async fn test_auth_login_unknown_email() {
 
     create_auth_collection(&router).await;
 
-    let body = json!({ "email": "nobody@example.com", "password": "whatever" });
+    let body = json!({ "identity": "nobody@example.com", "password": "whatever" });
     let res = router.clone()
         .oneshot(
             Request::builder()
@@ -156,7 +156,7 @@ async fn test_auth_on_base_collection_rejected() {
         .await
         .unwrap();
 
-    let body = json!({ "email": "test@example.com", "password": "secret123" });
+    let body = json!({ "identity": "test@example.com", "password": "secret123" });
     let res = router.clone()
         .oneshot(
             Request::builder()

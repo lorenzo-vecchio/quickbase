@@ -33,10 +33,11 @@ impl<'a> MigrationsRunner<'a> {
     }
 
     pub async fn up(&self) -> Result<(), DbError> {
+        // All system migrations and their tracking table live in the system DB.
         self.ensure_migrations_table().await?;
         for migration in self.list.items() {
             if !self.is_applied(migration.file).await? {
-                (migration.up)(self.pools.data.clone()).await?;
+                (migration.up)(self.pools.system.clone()).await?;
                 self.mark_applied(migration.file).await?;
             }
         }
@@ -50,16 +51,16 @@ impl<'a> MigrationsRunner<'a> {
         let applied: Vec<(String,)> = sqlx::query_as(
             "SELECT file FROM _migrations ORDER BY applied_at DESC LIMIT ?"
         )
-            .bind(count as i64)
-            .fetch_all(&self.pools.data)
-            .await?;
+        .bind(count as i64)
+        .fetch_all(&self.pools.system)
+        .await?;
 
         for (file,) in applied {
             // find the matching migration in our list
             let migration = self.list.items().iter().find(|m| m.file == file);
             if let Some(migration) = migration {
                 if let Some(down_fn) = migration.down {
-                    down_fn(self.pools.data.clone()).await?;
+                    down_fn(self.pools.system.clone()).await?;
                 }
                 self.mark_unapplied(&file).await?;
             }
@@ -71,7 +72,7 @@ impl<'a> MigrationsRunner<'a> {
     async fn mark_unapplied(&self, file: &str) -> Result<(), DbError> {
         sqlx::query("DELETE FROM _migrations WHERE file = ?")
             .bind(file)
-            .execute(&self.pools.data)
+            .execute(&self.pools.system)
             .await?;
         Ok(())
     }
@@ -83,8 +84,8 @@ impl<'a> MigrationsRunner<'a> {
                 applied_at TEXT NOT NULL DEFAULT (datetime('now'))
             )",
         )
-            .execute(&self.pools.data)
-            .await?;
+        .execute(&self.pools.system)
+        .await?;
         Ok(())
     }
 
@@ -92,16 +93,16 @@ impl<'a> MigrationsRunner<'a> {
         let row: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM _migrations WHERE file=?"
         )
-            .bind(file)
-            .fetch_one(&self.pools.data)
-            .await?;
+        .bind(file)
+        .fetch_one(&self.pools.system)
+        .await?;
         Ok(row.0 > 0)
     }
 
     async fn mark_applied(&self, file: &str) -> Result<(), DbError> {
         sqlx::query("INSERT INTO _migrations (file) VALUES (?)")
             .bind(file)
-            .execute(&self.pools.data)
+            .execute(&self.pools.system)
             .await?;
         Ok(())
     }

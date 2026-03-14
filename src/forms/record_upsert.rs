@@ -81,13 +81,19 @@ impl<'a> RecordUpsert<'a> {
                     continue;
                 }
                 let type_ok = match field.field_type {
-                    FieldType::Number => value.is_number(),
-                    FieldType::Bool   => value.is_boolean(),
+                    FieldType::Number   => value.is_number(),
+                    FieldType::Bool     => value.is_boolean(),
                     FieldType::Text
                     | FieldType::Email
                     | FieldType::Url
-                    | FieldType::Date  => value.is_string(),
-                    FieldType::Json    => true,
+                    | FieldType::Date
+                    | FieldType::Select
+                    | FieldType::Relation
+                    | FieldType::Editor
+                    | FieldType::Autodate
+                    | FieldType::Password
+                    | FieldType::File   => value.is_string() || value.is_array(),
+                    FieldType::Json     => true,
                 };
                 if !type_ok {
                     err.add(
@@ -98,7 +104,7 @@ impl<'a> RecordUpsert<'a> {
                 }
             }
         }
-        
+
         if self.record.collection.is_auth() {
             if let (Some(pw), Some(confirm)) = (&self.password, &self.password_confirm) {
                 if pw != confirm {
@@ -193,7 +199,9 @@ impl<'a> RecordUpsert<'a> {
             };
         }
 
-        query.execute(&self.app.pools().data).await?;
+        // Route to the correct pool based on collection name.
+        let pool = self.app.pool_for_collection(self.record.table_name());
+        query.execute(pool).await?;
 
         self.record.load(
             self.data.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
@@ -229,7 +237,9 @@ impl<'a> RecordUpsert<'a> {
             };
         }
         query = query.bind(now).bind(self.record.base.id.clone());
-        query.execute(&self.app.pools().data).await?;
+
+        let pool = self.app.pool_for_collection(self.record.table_name());
+        query.execute(pool).await?;
 
         self.record.load(self.data.iter().map(|(k, v)| (k.clone(), v.clone())).collect());
 

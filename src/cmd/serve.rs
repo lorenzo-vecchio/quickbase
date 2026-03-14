@@ -12,8 +12,9 @@ pub async fn run(data_dir: &str, addr: SocketAddr) -> Result<(), Box<dyn std::er
     app.bootstrap().await?;
 
     // check if any superusers exist — if not, generate installer link
+    // _superusers is a system table so we query the system pool.
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM _superusers")
-        .fetch_one(&app.pools().data)
+        .fetch_one(&app.pools().system)
         .await?;
 
     if count.0 == 0 {
@@ -31,7 +32,7 @@ pub async fn run(data_dir: &str, addr: SocketAddr) -> Result<(), Box<dyn std::er
             .bind("_system_@quickbase.local")
             .bind(&hashed)
             .bind(&token_key)
-            .execute(&app.pools().data)
+            .execute(&app.pools().system)
             .await?;
 
         let token = crate::tools::security::generate_installer_token(&temp_id, "_superusers")

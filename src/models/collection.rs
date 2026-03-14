@@ -42,17 +42,25 @@ pub struct Collection {
     #[sqlx(rename = "type")]
     pub collection_type: CollectionType,
 
-    /// JSON array of field definitions e.g. `[{"id":"...","name":"title","type":"text"}]`
+    /// JSON array of field definitions.
+    /// DB column is named `schema`; JSON key is `fields` (PocketBase v5+).
+    #[serde(rename = "fields")]
     pub schema: Json<Vec<SchemaField>>,
 
     /// JSON array of CREATE INDEX statements
     pub indexes: Json<serde_json::Value>,
 
     // API access rules — None means the rule is not set (locked down)
+    // DB columns are snake_case; JSON uses PocketBase's camelCase keys.
+    #[serde(rename = "listRule")]
     pub list_rule: Option<String>,
+    #[serde(rename = "viewRule")]
     pub view_rule: Option<String>,
+    #[serde(rename = "createRule")]
     pub create_rule: Option<String>,
+    #[serde(rename = "updateRule")]
     pub update_rule: Option<String>,
+    #[serde(rename = "deleteRule")]
     pub delete_rule: Option<String>,
 
     /// JSON blob of type-specific options (e.g. auth settings)
@@ -60,6 +68,12 @@ pub struct Collection {
 
     pub created: String,
     pub updated: String,
+
+    /// Whether this is a system-managed collection (name starts with `_`).
+    /// Not stored in the DB — computed after load.
+    #[sqlx(skip)]
+    #[serde(default)]
+    pub system: bool,
 }
 
 impl Collection {
@@ -79,9 +93,11 @@ impl Collection {
     }
 
     fn new(name: impl Into<String>, collection_type: CollectionType) -> Self {
+        let name = name.into();
+        let system = name.starts_with('_');
         Self {
             base: BaseModel::new(crate::models::collection::generate_id()),
-            name: name.into(),
+            name,
             collection_type,
             schema: Json(vec![]),
             indexes: Json(serde_json::json!([])),
@@ -90,9 +106,10 @@ impl Collection {
             create_rule: None,
             update_rule: None,
             delete_rule: None,
-            options: Json(serde_json::json!([])),
+            options: Json(serde_json::json!({})),
             created: String::new(),
             updated: String::new(),
+            system,
         }
     }
 
@@ -128,6 +145,11 @@ impl Collection {
     /// Find a field by name.
     pub fn field_by_name(&self, name: &str) -> Option<&SchemaField> {
         self.schema.0.iter().find(|f| f.name == name)
+    }
+
+    /// Compute and set the `system` flag from the collection name.
+    pub fn apply_system_flag(&mut self) {
+        self.system = self.name.starts_with('_');
     }
 }
 

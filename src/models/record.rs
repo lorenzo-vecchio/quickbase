@@ -16,6 +16,14 @@ pub struct Record {
     #[serde(skip)]
     pub collection: Collection,
 
+    /// Injected at serialization time for PocketBase API compatibility.
+    #[serde(rename = "collectionId")]
+    pub collection_id: String,
+
+    /// Injected at serialization time for PocketBase API compatibility.
+    #[serde(rename = "collectionName")]
+    pub collection_name: String,
+
     /// The record's field values, keyed by field name.
     /// e.g. {"title": "Hello", "views": 42, "published": true}
     #[serde(flatten)]
@@ -34,9 +42,13 @@ pub struct Record {
 impl Record {
     /// Mirrors PocketBase's NewRecord(collection).
     pub fn new(collection: Collection) -> Self {
+        let collection_id = collection.id().to_string();
+        let collection_name = collection.name.clone();
         Self {
             base: BaseModel::new(generate_id()),
             collection,
+            collection_id,
+            collection_name,
             data: HashMap::new(),
             expand: HashMap::new(),
             created: String::new(),
@@ -101,12 +113,33 @@ impl Record {
     }
 
     /// Load a map of values into the record's data fields.
+    /// System columns (id, created, updated) are extracted into the struct fields
+    /// so they are not duplicated in the flattened JSON output.
     /// Mirrors PocketBase's record.Load(data).
     pub fn load(&mut self, data: HashMap<String, Value>) {
-        if let Some(id) = data.get("id").and_then(|v| v.as_str()) {
-            self.base.id = id.to_string();
-            self.base.mark_as_not_new();
+        let mut data = data;
+
+        // Extract system columns into their dedicated struct fields.
+        if let Some(v) = data.remove("id") {
+            if let Some(id) = v.as_str() {
+                self.base.id = id.to_string();
+                self.base.mark_as_not_new();
+            }
         }
+        if let Some(v) = data.remove("created") {
+            if let Some(s) = v.as_str() {
+                self.created = s.to_string();
+            }
+        }
+        if let Some(v) = data.remove("updated") {
+            if let Some(s) = v.as_str() {
+                self.updated = s.to_string();
+            }
+        }
+        // Remove auth-only fields that must never be exposed in API responses.
+        data.remove("password");
+        data.remove("tokenKey");
+
         self.data.extend(data);
     }
 }

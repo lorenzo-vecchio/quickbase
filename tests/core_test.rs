@@ -41,7 +41,7 @@ async fn test_find_collection_by_name_found() {
         "INSERT INTO _collections (id, name, type, schema, indexes, options)
          VALUES ('r00000000000001', 'articles', 'base', '[]', '[]', '{}')"
     )
-        .execute(&app.pools().data)
+        .execute(&app.pools().system)
         .await
         .unwrap();
 
